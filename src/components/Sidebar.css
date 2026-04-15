@@ -1,0 +1,233 @@
+.sidebar {
+  width: 284px;
+  min-width: 284px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+  padding: 16px;
+  gap: 16px;
+}
+
+/* Header */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  gap: 8px;
+}
+
+.sidebar-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.logo-area {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-text {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.logo-text sup {
+  font-size: 8px;
+}
+
+.logo-sub {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.sidebar-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--bg-button-default);
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-card-hover);
+}
+
+.time-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg-button-default);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.theme-toggle {
+  background: var(--bg-button-default);
+}
+
+/* Filters */
+.filters-section {
+  padding: 16px;
+  background: var(--panel-gradient-vertical);
+  border: var(--panel-border);
+  border-radius: var(--panel-border-radius);
+  box-shadow: var(--panel-shadow);
+}
+
+.filters-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--filter-row-bg);
+  border: none;
+  box-shadow: var(--filter-row-shadow);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.filter-row:hover {
+  background: var(--bg-card-hover);
+}
+
+.filter-icon {
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+  color: var(--text-secondary);
+}
+
+.filter-label {
+  flex: 1;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.filter-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+/* Alerts */
+.alerts-section {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--panel-gradient-vertical);
+  border: var(--panel-border);
+  border-radius: var(--panel-border-radius);
+  box-shadow: var(--panel-shadow);
+}
+
+.alerts-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.alerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alert-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 16px;
+  background: var(--alert-card-bg);
+  border: 1px solid var(--alert-card-border);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  width: 100%;
+  box-shadow: var(--panel-shadow);
+}
+
+.alert-card:hover {
+  background: var(--bg-card-hover);
+}
+
+.alert-card.selected {
+  border-color: var(--severity-red);
+}
+
+.alert-card-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alert-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.alert-car-name {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alert-car-number {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.alert-card-desc {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

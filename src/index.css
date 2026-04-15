@@ -1,0 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Light theme */
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F8F8F8;
+  --bg-input: #F5F5F5;
+  --bg-topbar: #FFFFFF;
+  --bg-button-default: #E8E8E8;
+  --bg-save-btn: #2563EB;
+  --bg-save-btn-text: #FFFFFF;
+  --bg-view-all-btn: #2563EB;
+  --bg-view-all-text: #FFFFFF;
+
+  --text-primary: #282828;
+  --text-secondary: #8A8A8A;
+  --text-gray: #8A8A8A;
+  --text-white: #FFFFFF;
+
+  --icon-secondary: #C2C2C2;
+
+  --border-color: #E5E5E5;
+  --border-card: #E8E8E8;
+
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.15);
+
+  --severity-red: #FB2C36;
+  --severity-orange: #FDC700;
+  --severity-green: #55FB2C;
+  --severity-red-bg: rgba(251, 44, 54, 0.08);
+  --severity-orange-bg: rgba(253, 199, 0, 0.08);
+  --severity-green-bg: rgba(85, 251, 44, 0.08);
+  --severity-green-text: #2CFB4F;
+
+  --alert-card-bg: #FFFFFF;
+  --alert-card-border: #E8E8E8;
+  --dropdown-bg: #FFFFFF;
+  --dropdown-border: #E5E5E5;
+
+  --map-overlay-bg: rgba(255, 255, 255, 0.85);
+  --car-label-bg: #2563EB;
+  --car-label-text: #FFFFFF;
+  --route-color: #2563EB;
+
+  --filter-row-bg: #FFFFFF;
+  --filter-row-shadow: 0px 2px 14px rgba(0, 0, 0, 0.15);
+
+  --panel-gradient: none;
+  --panel-gradient-vertical: none;
+  --panel-border-radius: 16px;
+  --panel-border: 1px solid #E8E8E8;
+  --panel-shadow: 0 2px 14px rgba(0, 0, 0, 0.15);
+
+  --severity-red-gradient: none;
+  --severity-orange-gradient: none;
+  --severity-green-gradient: none;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #131313;
+  --bg-secondary: #1C1C1C;
+  --bg-card: #1C1C1C;
+  --bg-card-hover: #222222;
+  --bg-input: #1C1C1C;
+  --bg-topbar: #1C1C1C;
+  --bg-button-default: #333333;
+  --bg-save-btn: #30291F;
+  --bg-save-btn-text: #FEB344;
+  --bg-view-all-btn: #30291F;
+  --bg-view-all-text: #FEB344;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #8A8A8A;
+  --text-gray: #8A8A8A;
+  --text-white: #FFFFFF;
+
+  --icon-secondary: #3F3F3F;
+
+  --border-color: #2A2A2A;
+  --border-card: #2A2A2A;
+
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.15);
+
+  --severity-red: #FB2C36;
+  --severity-orange: #FDC700;
+  --severity-green: #55FB2C;
+  --severity-red-bg: rgba(251, 44, 54, 0.27);
+  --severity-orange-bg: rgba(253, 199, 0, 0.27);
+  --severity-green-bg: rgba(85, 251, 44, 0.27);
+  --severity-green-text: #2CFB4F;
+
+  --alert-card-bg: transparent;
+  --alert-card-border: transparent;
+  --dropdown-bg: #1C1C1C;
+  --dropdown-border: #2A2A2A;
+
+  --map-overlay-bg: rgba(28, 28, 28, 0.85);
+  --car-label-bg: #FEB344;
+  --car-label-text: #000000;
+  --route-color: #FEB344;
+
+  --filter-row-bg: #151515;
+  --filter-row-shadow: 0px 2px 14px rgba(0, 0, 0, 0.15);
+
+  --panel-gradient: linear-gradient(149.51deg, rgb(10, 10, 10) 6.41%, rgb(24, 24, 24) 40%, rgb(31, 31, 31) 100%);
+  --panel-gradient-vertical: linear-gradient(180deg, rgb(10, 10, 10) 0%, rgb(20, 20, 20) 40%, rgb(31, 31, 31) 100%);
+  --panel-border-radius: 26px;
+  --panel-border: 1px solid #2a2a2a;
+  --panel-shadow: 0px 2px 14px rgba(0, 0, 0, 0.15);
+
+  --severity-red-gradient: linear-gradient(179.13deg, rgba(162, 36, 43, 0.125) 17.98%, rgba(196, 48, 55, 0.5) 236.92%);
+  --severity-orange-gradient: linear-gradient(179.13deg, rgba(253, 199, 0, 0.06) 17.98%, rgba(253, 199, 0, 0.5) 236.92%);
+  --severity-green-gradient: linear-gradient(179.13deg, rgba(36, 162, 80, 0.125) 17.98%, rgba(36, 162, 80, 0.5) 236.92%);
+}
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input, select {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}

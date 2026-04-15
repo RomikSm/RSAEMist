@@ -1,0 +1,76 @@
+.map-panel {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.map-container {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Remove default leaflet marker shadows */
+.car-marker-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.car-label-icon {
+  background: none !important;
+  border: none !important;
+}
+
+/* Bottom overlay with car info */
+.map-bottom-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 500;
+  padding: 0 16px 16px;
+}
+
+.map-info-row {
+  display: flex;
+  gap: 1px;
+  background: var(--panel-gradient);
+  border: var(--panel-border);
+  border-radius: var(--panel-border-radius);
+  overflow: hidden;
+  box-shadow: var(--panel-shadow);
+}
+
+.map-info-block {
+  flex: 1;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-info-block.selected-card-block {
+  flex: 0.7;
+}
+
+.map-info-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.map-info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.map-info-value-large {
+  font-size: 20px;
+  font-weight: 700;
+}
