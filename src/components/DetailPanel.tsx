@@ -1,5 +1,11 @@
-import { shockEvents, messages } from '../data'
+import { useMemo } from 'react'
+import { useMessage, useMessages } from '../hooks/useMessages'
+import { formatClock, formatGForce, formatTimeAgo } from '../utils/format'
 import './DetailPanel.css'
+
+interface DetailPanelProps {
+  selectedMessageId: string | null
+}
 
 const AlertCircleSmall = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -15,7 +21,28 @@ const ChatIcon = () => (
   </svg>
 )
 
-export default function DetailPanel() {
+export default function DetailPanel({ selectedMessageId }: DetailPanelProps) {
+  const { data: selected } = useMessage(selectedMessageId)
+  const assetId = selected?.assetId
+
+  // Impact events for the selected asset (always evaluated in RAW mode
+  // so the list is not limited by thresholds — matches the "history" label).
+  const impactQuery = useMessages(
+    assetId ? { assetId, alertType: 'impact', limit: 10, mode: 'RAW' } : {},
+    Boolean(assetId),
+  )
+  const impactEvents = useMemo(() => {
+    if (!assetId) return []
+    return impactQuery.data?.items.filter(item => item.effectiveIsAlert) ?? []
+  }, [assetId, impactQuery.data])
+
+  // Recent non-alert notifications for the selected asset.
+  const messagesQuery = useMessages(
+    assetId ? { assetId, isAlert: false, limit: 6, mode: 'RAW' } : {},
+    Boolean(assetId),
+  )
+  const notifications = messagesQuery.data?.items ?? []
+
   return (
     <aside className="detail-panel">
       {/* Alert History */}
@@ -25,37 +52,61 @@ export default function DetailPanel() {
           <p className="detail-section-subtitle">(Historic list of "Impact" alert events)</p>
         </div>
         <div className="alert-history-list">
-          {shockEvents.map((event, i) => (
-            <div key={i} className="alert-history-row">
+          {!assetId && <div className="detail-placeholder">Select an alert to view history.</div>}
+          {assetId && impactQuery.isLoading && <div className="detail-placeholder">Loading…</div>}
+          {assetId && impactQuery.error && (
+            <div className="detail-placeholder detail-error">
+              {impactQuery.error.message}
+            </div>
+          )}
+          {assetId && !impactQuery.isLoading && !impactQuery.error && impactEvents.length === 0 && (
+            <div className="detail-placeholder">No impact events.</div>
+          )}
+          {impactEvents.map(event => (
+            <div key={event.messageId} className="alert-history-row">
               <AlertCircleSmall />
-              <span className="alert-history-gforce">{event.gForce}</span>
-              <span className="alert-history-time">{event.time}</span>
+              <span className="alert-history-gforce">
+                {formatGForce(event.alertValue, event.measurementUnits)}
+              </span>
+              <span className="alert-history-time">{formatClock(event.messageDate)}</span>
             </div>
           ))}
         </div>
-        <button className="view-all-btn">View All</button>
+        <button className="view-all-btn" disabled={!assetId}>View All</button>
       </div>
 
       {/* Message History */}
       <div className="detail-section">
         <div className="detail-section-header">
-          <h3 className="detail-section-title">Messagge History</h3>
+          <h3 className="detail-section-title">Message History</h3>
           <p className="detail-section-subtitle">Historic list of all notifications</p>
         </div>
         <div className="message-history-list">
-          {messages.map((msg, i) => (
-            <div key={i} className="message-card">
+          {!assetId && <div className="detail-placeholder">Select an alert to view messages.</div>}
+          {assetId && messagesQuery.isLoading && <div className="detail-placeholder">Loading…</div>}
+          {assetId && messagesQuery.error && (
+            <div className="detail-placeholder detail-error">
+              {messagesQuery.error.message}
+            </div>
+          )}
+          {assetId && !messagesQuery.isLoading && !messagesQuery.error && notifications.length === 0 && (
+            <div className="detail-placeholder">No messages.</div>
+          )}
+          {notifications.map(msg => (
+            <div key={msg.messageId} className="message-card">
               <div className="message-card-header">
                 <ChatIcon />
-                <span className="message-car-name">{msg.carName}</span>
-                <span className="message-time">{msg.timeAgo}</span>
+                <span className="message-car-name">{msg.carType ?? 'Railcar'} {msg.assetId}</span>
+                <span className="message-time">{formatTimeAgo(msg.messageDate)}</span>
               </div>
-              <div className="message-location">{msg.location}</div>
-              <div className="message-text">• {msg.text}</div>
+              <div className="message-location">{msg.location ?? '—'}</div>
+              <div className="message-text">
+                • {msg.alertType ?? 'telemetry'}: {formatGForce(msg.alertValue, msg.measurementUnits)}
+              </div>
             </div>
           ))}
         </div>
-        <button className="view-all-btn">View All</button>
+        <button className="view-all-btn" disabled={!assetId}>View All</button>
       </div>
     </aside>
   )

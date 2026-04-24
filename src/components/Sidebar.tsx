@@ -1,10 +1,25 @@
+import { useEffect } from 'react'
 import { useTheme } from '../ThemeContext'
-import { alerts } from '../data'
+import { useAuth } from '../AuthContext'
+import { useMessages, useAssets } from '../hooks/useMessages'
+import { useCarTypes, useAlertTypes } from '../hooks/useLookups'
+import { useFilters, buildMessageFilter } from '../FiltersContext'
+import FilterDropdown, { type FilterOption } from './FilterDropdown'
+import { formatTimeAgo, formatGForce } from '../utils/format'
+import type { MessageResponse } from '../api/types'
 import './Sidebar.css'
 
 interface SidebarProps {
-  selectedAlertId: string
-  onSelectAlert: (id: string) => void
+  selectedMessageId: string | null
+  onSelectMessage: (id: string) => void
+}
+
+type Severity = 'critical' | 'warning' | 'normal'
+
+function classifySeverity(message: MessageResponse): Severity {
+  if (message.effectiveIsPriorityAlert) return 'critical'
+  if (message.effectiveIsAlert) return 'warning'
+  return 'normal'
 }
 
 /* Simple inline SVG icons matching the Figma design */
@@ -42,11 +57,6 @@ const MoonIcon = () => (
   </svg>
 )
 
-const ChevronDown = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-)
 
 /* Filter icons */
 const TriangleIcon = () => (
@@ -99,23 +109,77 @@ const CheckCircleIcon = ({ color }: { color: string }) => (
   </svg>
 )
 
-const severityConfig = {
+const severityConfig: Record<Severity, { color: string; bg: string; gradient: string; Icon: typeof AlertCircleIcon }> = {
   critical: { color: 'var(--severity-red)', bg: 'var(--severity-red-bg)', gradient: 'var(--severity-red-gradient)', Icon: AlertCircleIcon },
   warning: { color: 'var(--severity-orange)', bg: 'var(--severity-orange-bg)', gradient: 'var(--severity-orange-gradient)', Icon: AlertCircleIcon },
-  info: { color: 'var(--severity-green)', bg: 'var(--severity-green-bg)', gradient: 'var(--severity-green-gradient)', Icon: CheckCircleIcon },
   normal: { color: 'var(--severity-green)', bg: 'var(--severity-green-bg)', gradient: 'var(--severity-green-gradient)', Icon: CheckCircleIcon },
 }
 
-const filters = [
-  { label: 'Car type', icon: <TriangleIcon /> },
-  { label: 'Location', icon: <MapPinIcon /> },
-  { label: 'Load State', icon: <LoadIcon /> },
-  { label: 'Operational Time', icon: <ClockFilterIcon /> },
-  { label: 'Period', icon: <CalendarIcon /> },
+const PERIOD_OPTIONS: FilterOption<number>[] = [
+  { value: 1, label: 'Today' },
+  { value: 3, label: 'Last 3 days' },
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
 ]
 
-export default function Sidebar({ selectedAlertId, onSelectAlert }: SidebarProps) {
+export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarProps) {
   const { theme, toggleTheme } = useTheme()
+  const { user, logout } = useAuth()
+  const { filters: scope, setFilter, patch } = useFilters()
+
+  const carTypesQuery = useCarTypes()
+  const alertTypesQuery = useAlertTypes()
+  const assetsQuery = useAssets()
+
+  // When the user refines by car type in the left pane, a previously
+  // pinned asset from the top bar that is of a different car type would
+  // make the alerts list empty. Drop the asset pin in that case so the
+  // refinement behaves intuitively (see customer feedback).
+  const handleCarTypeChange = (carType: string | null) => {
+    if (!carType) {
+      setFilter('carType', null)
+      return
+    }
+    const next: Partial<typeof scope> = { carType }
+    if (scope.assetId) {
+      const asset = assetsQuery.data?.items.find(a => a.assetId === scope.assetId)
+      if (asset?.carType && asset.carType !== carType) {
+        next.assetId = null
+      }
+    }
+    patch(next)
+  }
+
+  const carTypeOptions: FilterOption<string>[] =
+    carTypesQuery.data?.items.map(c => ({ value: c.carType, label: c.carType })) ?? []
+
+  const alertTypeOptions: FilterOption<string>[] =
+    alertTypesQuery.data?.items.map(a => ({
+      value: a.alertType,
+      label: a.alertType.charAt(0).toUpperCase() + a.alertType.slice(1),
+      hint: a.measurementUnits ?? undefined,
+    })) ?? []
+
+  // The sidebar shows the alerts list for the current global scope. If
+  // the user narrowed severity via TopBar we honour that; otherwise we
+  // default to `is_priority_alert=true` so the list stays focused on
+  // high-priority issues (matches the Figma label "High Priority Alerts").
+  const messageFilter = buildMessageFilter(scope, {
+    mode: 'RAW',
+    limit: 25,
+    ...(scope.severity === 'all' ? { isPriorityAlert: true } : {}),
+  })
+  const { data, error, isLoading } = useMessages(messageFilter)
+  const items = data?.items ?? []
+
+  // Auto-select the first alert once data arrives (if the user has not
+  // picked anything yet). We deliberately depend on `items.length` rather
+  // than the array itself to avoid spurious re-runs.
+  useEffect(() => {
+    if (selectedMessageId === null && items.length > 0) {
+      onSelectMessage(items[0].messageId)
+    }
+  }, [selectedMessageId, items, onSelectMessage])
 
   return (
     <aside className="sidebar">
@@ -128,53 +192,123 @@ export default function Sidebar({ selectedAlertId, onSelectAlert }: SidebarProps
           </div>
         </div>
         <div className="sidebar-header-right">
-          <button className="icon-btn" aria-label="Mail">
+          <button className="icon-btn" aria-label="Mail" title={user?.login ?? 'Account'}>
             <MailIcon />
           </button>
           <div className="time-badge">
             <ClockIcon />
-            <span>1:22 AM</span>
+            <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           <button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
+          <button className="icon-btn" onClick={logout} aria-label="Sign out" title="Sign out">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Refine list — operates on top of the global scope set in the TopBar. */}
       <div className="filters-section">
-        <div className="filters-title">Filters</div>
-        {filters.map(f => (
-          <button key={f.label} className="filter-row">
-            <span className="filter-icon">{f.icon}</span>
-            <span className="filter-label">{f.label}</span>
-            <span className="filter-chevron"><ChevronDown /></span>
-          </button>
-        ))}
+        <div className="filters-title">Refine list</div>
+
+        <FilterDropdown<string>
+          variant="row"
+          icon={<TriangleIcon />}
+          allLabel="Any car type"
+          placeholder="Car type"
+          options={carTypeOptions}
+          value={scope.carType}
+          onChange={handleCarTypeChange}
+          statusMessage={carTypesQuery.isLoading ? 'Loading…' : carTypesQuery.error ? 'Failed to load' : undefined}
+        />
+
+        <FilterDropdown<string>
+          variant="row"
+          icon={<MapPinIcon />}
+          allLabel="Any alert type"
+          placeholder="Alert type"
+          options={alertTypeOptions}
+          value={scope.alertType}
+          onChange={v => setFilter('alertType', v)}
+          statusMessage={alertTypesQuery.isLoading ? 'Loading…' : alertTypesQuery.error ? 'Failed to load' : undefined}
+        />
+
+        <button
+          type="button"
+          className="filter-row filter-row-disabled"
+          disabled
+          title="Not available: message_events schema has no load-state field."
+        >
+          <span className="filter-icon"><LoadIcon /></span>
+          <span className="filter-label">Load State</span>
+          <span className="filter-hint">n/a</span>
+        </button>
+
+        <button
+          type="button"
+          className="filter-row filter-row-disabled"
+          disabled
+          title="Not available: no operational-hours data on the backend yet."
+        >
+          <span className="filter-icon"><ClockFilterIcon /></span>
+          <span className="filter-label">Operational Time</span>
+          <span className="filter-hint">n/a</span>
+        </button>
+
+        <FilterDropdown<number>
+          variant="row"
+          icon={<CalendarIcon />}
+          allLabel="All time"
+          placeholder="Period"
+          options={PERIOD_OPTIONS}
+          value={scope.rangeDays}
+          onChange={v => setFilter('rangeDays', v)}
+        />
       </div>
 
       {/* High Priority Alerts */}
       <div className="alerts-section">
         <div className="alerts-title">High Priority Alerts</div>
         <div className="alerts-list">
-          {alerts.map(alert => {
-            const cfg = severityConfig[alert.severity]
+          {isLoading && <div className="alerts-placeholder">Loading alerts…</div>}
+          {error && (
+            <div className="alerts-placeholder alerts-error">
+              Failed to load alerts: {error.message}
+            </div>
+          )}
+          {!isLoading && !error && items.length === 0 && (
+            <div className="alerts-placeholder">No priority alerts.</div>
+          )}
+          {items.map(msg => {
+            const severity = classifySeverity(msg)
+            const cfg = severityConfig[severity]
+            const carLabel = msg.carType ?? 'Train Car'
+            const carNumber = `#${msg.assetId.slice(-4)}`
+            const description = msg.alertType
+              ? `${msg.alertType[0].toUpperCase()}${msg.alertType.slice(1)} ${formatGForce(msg.alertValue, msg.measurementUnits)}`
+              : formatGForce(msg.alertValue, msg.measurementUnits)
             return (
               <button
-                key={alert.id}
-                className={`alert-card ${selectedAlertId === alert.id ? 'selected' : ''}`}
-                onClick={() => onSelectAlert(alert.id)}
+                key={msg.messageId}
+                className={`alert-card ${selectedMessageId === msg.messageId ? 'selected' : ''}`}
+                onClick={() => onSelectMessage(msg.messageId)}
                 style={{ backgroundImage: cfg.gradient }}
+                title={formatTimeAgo(msg.messageDate)}
               >
                 <div className="alert-card-icon" style={{ color: cfg.color }}>
                   <cfg.Icon color={cfg.color} />
                 </div>
                 <div className="alert-card-content">
                   <div className="alert-card-top">
-                    <span className="alert-car-name" style={{ color: cfg.color }}>{alert.carName}</span>
-                    <span className="alert-car-number">{alert.carNumber}</span>
+                    <span className="alert-car-name" style={{ color: cfg.color }}>{carLabel} {msg.assetId}</span>
+                    <span className="alert-car-number">{carNumber}</span>
                   </div>
-                  <div className="alert-card-desc">{alert.description}</div>
+                  <div className="alert-card-desc">{description}</div>
                 </div>
               </button>
             )

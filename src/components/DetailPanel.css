@@ -132,3 +132,8 @@
   margin-top: 6px;
   margin-left: 22px;
 }
+
+
+.detail-placeholder { padding: 12px; font-size: 13px; color: var(--text-secondary); }
+.detail-error { color: #f87171; }
+.view-all-btn:disabled { opacity: 0.5; cursor: not-allowed; }
