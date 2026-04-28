@@ -40,8 +40,15 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** JSON body; will be serialised and `Content-Type` set. */
   json?: unknown
-  /** Query string parameters; `null`/`undefined` values are skipped. */
-  query?: Record<string, string | number | boolean | null | undefined>
+  /**
+   * Query string parameters; `null`/`undefined`/`''` values are skipped.
+   * Array values are serialized as repeated params (e.g. `?k=a&k=b`),
+   * which is what the Spring backend expects for multi-value filters.
+   */
+  query?: Record<
+    string,
+    string | number | boolean | null | undefined | ReadonlyArray<string | number | boolean>
+  >
   /** Abort signal for cancellation (used by React hooks on unmount). */
   signal?: AbortSignal
   /** Internal: set to true to skip the auto-refresh retry to avoid loops. */
@@ -56,6 +63,13 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined || value === '') continue
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item === null || item === undefined || item === '') continue
+        params.append(key, String(item))
+      }
+      continue
+    }
     params.append(key, String(value))
   }
   const qs = params.toString()

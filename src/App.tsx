@@ -22,8 +22,11 @@ function AppContent() {
       />
       <div className="main-content">
         <div className="content-area">
-          <MapPanel selectedMessageId={selectedMessageId} />
-          <DetailPanel selectedMessageId={selectedMessageId} />
+          <MapPanel
+            selectedMessageId={selectedMessageId}
+            onSelectMessage={setSelectedMessageId}
+          />
+          <DetailPanel />
         </div>
       </div>
     </div>

@@ -7,8 +7,21 @@ import type {
   MessageResponse,
 } from './types'
 
-/** Maps a camelCase filter onto the snake_case query params expected by the backend. */
-function toQuery(filter: MessageFilter): Record<string, string | number | boolean | undefined> {
+type QueryValue =
+  | string
+  | number
+  | boolean
+  | undefined
+  | ReadonlyArray<string | number | boolean>
+
+/**
+ * Maps a camelCase filter onto the snake_case query params expected by
+ * the backend. Multi-value fields (assetId / alertType / carType /
+ * location / owner / carDirector) pass through as arrays — `client.ts`
+ * serialises them as repeated query params (`?k=a&k=b`), which is what
+ * Spring's `List<String>` `@RequestParam` binders expect.
+ */
+function toQuery(filter: MessageFilter): Record<string, QueryValue> {
   return {
     asset_id: filter.assetId,
     is_alert: filter.isAlert,

@@ -122,6 +122,37 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.filter-custom-range {
+  display: flex;
+  gap: 8px;
+  padding: 4px 4px 8px 4px;
+}
+
+.filter-custom-range-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.filter-custom-range-field input {
+  background: var(--dropdown-bg);
+  border: 1px solid var(--dropdown-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  color-scheme: light dark;
+}
+
+.filter-custom-range-field input:focus {
+  outline: none;
+  border-color: var(--severity-orange);
+}
+
 .filter-hint {
   margin-left: auto;
   font-size: 11px;
@@ -152,6 +183,109 @@
   display: flex;
   align-items: center;
   color: var(--text-secondary);
+}
+
+/* Action row at the bottom of the Filters block (Clear / Save View). */
+.filters-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.filters-action-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--dropdown-border);
+  background: var(--dropdown-bg);
+  color: var(--text-primary);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filters-action-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+}
+
+.filters-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.filters-action-save {
+  border-color: var(--severity-orange);
+  color: var(--severity-orange);
+}
+
+.filters-saved-wrap {
+  margin-top: 8px;
+}
+
+.filters-saved-toggle {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.filters-saved-toggle:hover {
+  color: var(--text-primary);
+}
+
+.filters-saved-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--dropdown-bg);
+  border: 1px solid var(--dropdown-border);
+  border-radius: 8px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.filters-saved-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filters-saved-apply {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.filters-saved-apply:hover {
+  background: var(--bg-card-hover);
+}
+
+.filters-saved-delete {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.filters-saved-delete:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 /* Alerts */
