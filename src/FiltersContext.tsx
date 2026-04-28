@@ -30,21 +30,29 @@ import type { MessageFilter } from './api/types'
 export type SeverityFilter = 'all' | 'alerts' | 'priority'
 
 export interface FiltersState {
-  /** Single asset scope (top-bar "All Cars"). `null` = all assets. */
+  /** Single asset scope ("All Cars" typeahead). `null` = all assets. */
   assetId: string | null
-  /** Single location scope (top-bar "All Locations"). `null` = all. */
-  location: string | null
-  /** Alert severity gate (top-bar "Severity"). */
+  /** Multi-select location scope. Empty array = all locations. */
+  location: string[]
+  /** Alert severity gate (single-value enum). */
   severity: SeverityFilter
-  /** Trailing time window in days (top-bar "Last 7 Days"). `null` = all time. */
+  /**
+   * Trailing time window in days.
+   *  - positive number — last N days (today, 3, 7, 30…);
+   *  - `-1`            — custom range, see `customFrom` / `customTo`;
+   *  - `null`          — all time.
+   */
   rangeDays: number | null
+  /** ISO date `YYYY-MM-DD` (inclusive start), used only when `rangeDays === -1`. */
+  customFrom: string | null
+  /** ISO date `YYYY-MM-DD` (inclusive end), used only when `rangeDays === -1`. */
+  customTo: string | null
 
-  // Refinements from the left sidebar. They apply on top of the scope
-  // above and never widen it.
-  /** Car-type refinement from the left sidebar. `null` = any type. */
-  carType: string | null
-  /** Alert-type refinement (load / door / impact / handbrake). */
-  alertType: string | null
+  // Refinements from the left sidebar.
+  /** Multi-select car types. Empty array = any type. */
+  carType: string[]
+  /** Multi-select alert types (load / door / impact / handbrake). */
+  alertType: string[]
 }
 
 /** Named preset saved under "Save View" in the top bar. */
@@ -70,11 +78,37 @@ export interface FiltersContextValue {
 
 const DEFAULT_STATE: FiltersState = {
   assetId: null,
-  location: null,
+  location: [],
   severity: 'all',
-  rangeDays: null,
-  carType: null,
-  alertType: null,
+  rangeDays: 30,
+  customFrom: null,
+  customTo: null,
+  carType: [],
+  alertType: [],
+}
+
+/**
+ * Migrate a previously-saved view (which may have stored `carType` /
+ * `alertType` / `location` as `string | null`) to the current shape
+ * where these fields are `string[]`.
+ */
+function normalizeState(raw: unknown): FiltersState {
+  const s = (raw ?? {}) as Partial<FiltersState> & Record<string, unknown>
+  const arr = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
+    if (typeof v === 'string') return [v]
+    return []
+  }
+  return {
+    assetId: typeof s.assetId === 'string' ? s.assetId : null,
+    location: arr(s.location),
+    severity: (s.severity === 'alerts' || s.severity === 'priority' || s.severity === 'all') ? s.severity : 'all',
+    rangeDays: typeof s.rangeDays === 'number' ? s.rangeDays : null,
+    customFrom: typeof s.customFrom === 'string' ? s.customFrom : null,
+    customTo: typeof s.customTo === 'string' ? s.customTo : null,
+    carType: arr(s.carType),
+    alertType: arr(s.alertType),
+  }
 }
 
 const STORAGE_KEY = 'rsaemist.savedViews.v1'
@@ -85,14 +119,16 @@ function loadSavedViews(): SavedView[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (v): v is SavedView =>
-        typeof v === 'object' &&
-        v !== null &&
-        typeof (v as SavedView).id === 'string' &&
-        typeof (v as SavedView).name === 'string' &&
-        typeof (v as SavedView).state === 'object',
-    )
+    return parsed
+      .filter(
+        (v): v is SavedView =>
+          typeof v === 'object' &&
+          v !== null &&
+          typeof (v as SavedView).id === 'string' &&
+          typeof (v as SavedView).name === 'string' &&
+          typeof (v as SavedView).state === 'object',
+      )
+      .map(v => ({ ...v, state: normalizeState(v.state) }))
   } catch {
     return []
   }
@@ -141,7 +177,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   const applyView = useCallback(
     (id: string) => {
       const v = savedViews.find(x => x.id === id)
-      if (v) setFilters(v.state)
+      if (v) setFilters(normalizeState(v.state))
     },
     [savedViews],
   )
@@ -165,39 +201,52 @@ export function useFilters(): FiltersContextValue {
 }
 
 /**
- * Translates the UI filter state into a `MessageFilter` accepted by the
- * backend. `rangeDays` is converted to an ISO `from` timestamp so that
- * Spring's `@DateTimeFormat(ISO.DATE_TIME)` binder accepts it.
+ * Translate UI filter state into a `MessageFilter` accepted by the backend.
+ *
+ * The backend `/api/v1/messages` accepts repeated query params for
+ * multi-value filters (`asset_id`, `alert_type`, `car_type`,
+ * `location`), so we forward arrays as-is — `client.ts::buildUrl`
+ * serialises them as `?k=a&k=b`. Single-value selections are sent as
+ * a single string for shorter, cleaner URLs.
  */
 export function buildMessageFilter(state: FiltersState, extra: MessageFilter = {}): MessageFilter {
   const out: MessageFilter = { ...extra }
   if (state.assetId) out.assetId = state.assetId
-  if (state.location) out.location = state.location
-  if (state.carType) out.carType = state.carType
-  if (state.alertType) out.alertType = state.alertType
+  if (state.location.length === 1) out.location = state.location[0]
+  else if (state.location.length > 1) out.location = state.location
+  if (state.carType.length === 1) out.carType = state.carType[0]
+  else if (state.carType.length > 1) out.carType = state.carType
+  if (state.alertType.length === 1) out.alertType = state.alertType[0]
+  else if (state.alertType.length > 1) out.alertType = state.alertType
 
   if (state.severity === 'priority') out.isPriorityAlert = true
   else if (state.severity === 'alerts') out.isAlert = true
   // 'all' → do not constrain.
 
-  if (state.rangeDays !== null && state.rangeDays > 0) {
+  if (state.rangeDays === -1) {
+    // Custom range: send `from` / `to` as local-date boundaries.
+    if (state.customFrom) out.from = `${state.customFrom}T00:00:00`
+    if (state.customTo) out.to = `${state.customTo}T23:59:59`
+  } else if (state.rangeDays !== null && state.rangeDays > 0) {
     const from = new Date()
     from.setDate(from.getDate() - state.rangeDays)
-    // Backend expects ISO LocalDateTime (no timezone).
     out.from = from.toISOString().replace(/\.\d+Z$/, '')
   }
   return out
 }
 
+
 /** True when `state` differs from the default ("nothing configured"). */
 export function isFiltersActive(state: FiltersState): boolean {
   return (
-    state.assetId !== DEFAULT_STATE.assetId ||
-    state.location !== DEFAULT_STATE.location ||
-    state.severity !== DEFAULT_STATE.severity ||
+    state.assetId !== null ||
+    state.location.length > 0 ||
+    state.severity !== 'all' ||
     state.rangeDays !== DEFAULT_STATE.rangeDays ||
-    state.carType !== DEFAULT_STATE.carType ||
-    state.alertType !== DEFAULT_STATE.alertType
+    state.customFrom !== null ||
+    state.customTo !== null ||
+    state.carType.length > 0 ||
+    state.alertType.length > 0
   )
 }
 

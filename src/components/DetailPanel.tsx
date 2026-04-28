@@ -1,11 +1,12 @@
-import { useMemo } from 'react'
-import { useMessage, useMessages } from '../hooks/useMessages'
+import { useMemo, useState } from 'react'
+import { useMessages } from '../hooks/useMessages'
+import { useFilters, buildMessageFilter } from '../FiltersContext'
 import { formatClock, formatGForce, formatTimeAgo } from '../utils/format'
+import HistoryModal, { ImpactHistoryRow, MessageHistoryRow } from './HistoryModal'
+import type { MessageFilter } from '../api/types'
 import './DetailPanel.css'
 
-interface DetailPanelProps {
-  selectedMessageId: string | null
-}
+const PREVIEW_SIZE = 5
 
 const AlertCircleSmall = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -21,27 +22,29 @@ const ChatIcon = () => (
   </svg>
 )
 
-export default function DetailPanel({ selectedMessageId }: DetailPanelProps) {
-  const { data: selected } = useMessage(selectedMessageId)
-  const assetId = selected?.assetId
+export default function DetailPanel() {
+  const { filters: scope } = useFilters()
+  const [openModal, setOpenModal] = useState<null | 'alerts' | 'messages'>(null)
 
-  // Impact events for the selected asset (always evaluated in RAW mode
-  // so the list is not limited by thresholds — matches the "history" label).
-  const impactQuery = useMessages(
-    assetId ? { assetId, alertType: 'impact', limit: 10, mode: 'RAW' } : {},
-    Boolean(assetId),
+  // Alert History — last 5 impact alerts matching the global filters.
+  // Impact only (matches the section subtitle), is_alert=true so we
+  // don't pull in non-alerting telemetry.
+  const alertsBaseFilter = useMemo<MessageFilter>(
+    () => buildMessageFilter(scope, { alertType: 'impact', isAlert: true }),
+    [scope],
   )
-  const impactEvents = useMemo(() => {
-    if (!assetId) return []
-    return impactQuery.data?.items.filter(item => item.effectiveIsAlert) ?? []
-  }, [assetId, impactQuery.data])
+  const alertsPreview = useMessages({ ...alertsBaseFilter, limit: PREVIEW_SIZE })
 
-  // Recent non-alert notifications for the selected asset.
-  const messagesQuery = useMessages(
-    assetId ? { assetId, isAlert: false, limit: 6, mode: 'RAW' } : {},
-    Boolean(assetId),
+  // Message History — last 5 messages matching the global filters,
+  // without forcing the alert flag (this is the "all notifications" list).
+  const messagesBaseFilter = useMemo<MessageFilter>(
+    () => buildMessageFilter(scope),
+    [scope],
   )
-  const notifications = messagesQuery.data?.items ?? []
+  const messagesPreview = useMessages({ ...messagesBaseFilter, limit: PREVIEW_SIZE })
+
+  const alertItems = alertsPreview.data?.items ?? []
+  const messageItems = messagesPreview.data?.items ?? []
 
   return (
     <aside className="detail-panel">
@@ -49,20 +52,19 @@ export default function DetailPanel({ selectedMessageId }: DetailPanelProps) {
       <div className="detail-section">
         <div className="detail-section-header">
           <h3 className="detail-section-title">Alert History</h3>
-          <p className="detail-section-subtitle">(Historic list of "Impact" alert events)</p>
+          <p className="detail-section-subtitle">(Recent "Impact" alert events)</p>
         </div>
         <div className="alert-history-list">
-          {!assetId && <div className="detail-placeholder">Select an alert to view history.</div>}
-          {assetId && impactQuery.isLoading && <div className="detail-placeholder">Loading…</div>}
-          {assetId && impactQuery.error && (
+          {alertsPreview.isLoading && <div className="detail-placeholder">Loading…</div>}
+          {alertsPreview.error && (
             <div className="detail-placeholder detail-error">
-              {impactQuery.error.message}
+              {alertsPreview.error.message}
             </div>
           )}
-          {assetId && !impactQuery.isLoading && !impactQuery.error && impactEvents.length === 0 && (
+          {!alertsPreview.isLoading && !alertsPreview.error && alertItems.length === 0 && (
             <div className="detail-placeholder">No impact events.</div>
           )}
-          {impactEvents.map(event => (
+          {alertItems.map(event => (
             <div key={event.messageId} className="alert-history-row">
               <AlertCircleSmall />
               <span className="alert-history-gforce">
@@ -72,27 +74,32 @@ export default function DetailPanel({ selectedMessageId }: DetailPanelProps) {
             </div>
           ))}
         </div>
-        <button className="view-all-btn" disabled={!assetId}>View All</button>
+        <button
+          className="view-all-btn"
+          onClick={() => setOpenModal('alerts')}
+          disabled={alertItems.length === 0}
+        >
+          View All
+        </button>
       </div>
 
       {/* Message History */}
       <div className="detail-section">
         <div className="detail-section-header">
           <h3 className="detail-section-title">Message History</h3>
-          <p className="detail-section-subtitle">Historic list of all notifications</p>
+          <p className="detail-section-subtitle">Recent notifications</p>
         </div>
         <div className="message-history-list">
-          {!assetId && <div className="detail-placeholder">Select an alert to view messages.</div>}
-          {assetId && messagesQuery.isLoading && <div className="detail-placeholder">Loading…</div>}
-          {assetId && messagesQuery.error && (
+          {messagesPreview.isLoading && <div className="detail-placeholder">Loading…</div>}
+          {messagesPreview.error && (
             <div className="detail-placeholder detail-error">
-              {messagesQuery.error.message}
+              {messagesPreview.error.message}
             </div>
           )}
-          {assetId && !messagesQuery.isLoading && !messagesQuery.error && notifications.length === 0 && (
+          {!messagesPreview.isLoading && !messagesPreview.error && messageItems.length === 0 && (
             <div className="detail-placeholder">No messages.</div>
           )}
-          {notifications.map(msg => (
+          {messageItems.map(msg => (
             <div key={msg.messageId} className="message-card">
               <div className="message-card-header">
                 <ChatIcon />
@@ -106,8 +113,31 @@ export default function DetailPanel({ selectedMessageId }: DetailPanelProps) {
             </div>
           ))}
         </div>
-        <button className="view-all-btn" disabled={!assetId}>View All</button>
+        <button
+          className="view-all-btn"
+          onClick={() => setOpenModal('messages')}
+          disabled={messageItems.length === 0}
+        >
+          View All
+        </button>
       </div>
+
+      {openModal === 'alerts' && (
+        <HistoryModal
+          title="Alert History"
+          filter={alertsBaseFilter}
+          renderRow={msg => <ImpactHistoryRow msg={msg} />}
+          onClose={() => setOpenModal(null)}
+        />
+      )}
+      {openModal === 'messages' && (
+        <HistoryModal
+          title="Message History"
+          filter={messagesBaseFilter}
+          renderRow={msg => <MessageHistoryRow msg={msg} />}
+          onClose={() => setOpenModal(null)}
+        />
+      )}
     </aside>
   )
 }

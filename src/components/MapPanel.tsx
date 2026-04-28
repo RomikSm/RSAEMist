@@ -3,16 +3,16 @@ import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useTheme } from '../ThemeContext'
 import { useApi } from '../hooks/useApi'
-import { useMessage } from '../hooks/useMessages'
+import { useMessage, useMessages } from '../hooks/useMessages'
 import { lookups } from '../api'
-import type { AssetSummaryResponse } from '../api/types'
+import type { AssetSummaryResponse, MessageResponse } from '../api/types'
 import { formatClock, formatGForce } from '../utils/format'
 import 'leaflet/dist/leaflet.css'
 import './MapPanel.css'
-import TopBar from './TopBar'
 
 interface MapPanelProps {
   selectedMessageId: string | null
+  onSelectMessage?: (id: string) => void
 }
 
 /** Fallback centre used while nothing is selected (Newport News, VA). */
@@ -82,7 +82,69 @@ function RecenterOnChange({ position }: { position: [number, number] }) {
   return null
 }
 
-export default function MapPanel({ selectedMessageId }: MapPanelProps) {
+/**
+ * From a flat list of messages (already sorted DESC by `message_date` on
+ * the backend) keep only the most recent message per `assetId`. This
+ * gives us "the latest known position of every railcar" without a
+ * dedicated backend endpoint.
+ */
+function latestPerAsset(items: MessageResponse[]): MessageResponse[] {
+  const seen = new Set<string>()
+  const out: MessageResponse[] = []
+  for (const m of items) {
+    if (seen.has(m.assetId)) continue
+    if (m.latitude === null || m.longitude === null) continue
+    seen.add(m.assetId)
+    out.push(m)
+  }
+  return out
+}
+
+/** Renders one clickable marker per car for the fleet overview. */
+function FleetMarkers({
+  cars,
+  theme,
+  onSelectMessage,
+}: {
+  cars: MessageResponse[]
+  theme: string
+  onSelectMessage?: (id: string) => void
+}) {
+  const map = useMap()
+
+  // Fit map to all markers when the set changes — but only if there is
+  // more than one. With a single car we keep the default zoom so it
+  // doesn't snap to maximum.
+  useEffect(() => {
+    if (cars.length < 2) return
+    const bounds = L.latLngBounds(
+      cars.map(c => [Number(c.latitude), Number(c.longitude)] as [number, number]),
+    )
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 10 })
+  }, [map, cars])
+
+  const icon = useMemo(() => createCarIcon(theme), [theme])
+
+  return (
+    <>
+      {cars.map(c => (
+        <Marker
+          key={c.messageId}
+          position={[Number(c.latitude), Number(c.longitude)]}
+          icon={icon}
+          eventHandlers={
+            onSelectMessage
+              ? { click: () => onSelectMessage(c.messageId) }
+              : undefined
+          }
+          title={`${c.carType ?? 'Car'} ${c.assetId}${c.location ? ' · ' + c.location : ''}`}
+        />
+      ))}
+    </>
+  )
+}
+
+export default function MapPanel({ selectedMessageId, onSelectMessage }: MapPanelProps) {
   const { theme } = useTheme()
   const { data: message } = useMessage(selectedMessageId)
 
@@ -93,6 +155,16 @@ export default function MapPanel({ selectedMessageId }: MapPanelProps) {
     if (!message || !assets) return null
     return assets.items.find(a => a.assetId === message.assetId) ?? null
   }, [assets, message])
+
+  // Fleet overview: latest message per asset. Loaded only when nothing
+  // is selected (gated via the `enabled` flag), so single-car drilldown
+  // doesn't pay the cost of a 1000-row request.
+  const fleetEnabled = selectedMessageId === null
+  const { data: fleetData } = useMessages({ limit: 1000, mode: 'RAW' }, fleetEnabled)
+  const fleetCars = useMemo(
+    () => latestPerAsset(fleetData?.items ?? []),
+    [fleetData],
+  )
 
   const position: [number, number] = useMemo(() => {
     if (message && message.latitude !== null && message.longitude !== null) {
@@ -107,20 +179,27 @@ export default function MapPanel({ selectedMessageId }: MapPanelProps) {
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
+  const showFleet = selectedMessageId === null
+
   return (
     <div className="map-panel">
-      <TopBar />
       <MapContainer
         center={position}
-        zoom={14}
+        zoom={showFleet ? 5 : 14}
         className="map-container"
         zoomControl={false}
         attributionControl={false}
       >
         <TileLayer url={tileUrl} />
-        <Marker position={position} icon={createCarIcon(theme)} />
-        <CarLabel theme={theme} label={carLabel} position={position} />
-        <RecenterOnChange position={position} />
+        {showFleet ? (
+          <FleetMarkers cars={fleetCars} theme={theme} onSelectMessage={onSelectMessage} />
+        ) : (
+          <>
+            <Marker position={position} icon={createCarIcon(theme)} />
+            <CarLabel theme={theme} label={carLabel} position={position} />
+            <RecenterOnChange position={position} />
+          </>
+        )}
       </MapContainer>
 
       {/* Bottom overlay: selected car info */}

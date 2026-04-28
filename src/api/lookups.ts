@@ -4,6 +4,7 @@ import type {
   AlertEvaluationMode,
   AlertTypeListResponse,
   AssetListResponse,
+  AssetSearchListResponse,
   CarDirectorListResponse,
   CarTypeListResponse,
   LocationListResponse,
@@ -15,6 +16,23 @@ export function getAssets(
   signal?: AbortSignal,
 ): Promise<AssetListResponse> {
   return request<AssetListResponse>('/assets', { query: { mode }, signal })
+}
+
+/**
+ * Typeahead lookup for the "All Cars" filter. The backend rejects blank
+ * queries with `400`, so callers should only invoke this once the user
+ * has typed something — the dropdown displays an empty list otherwise.
+ */
+export function searchAssets(
+  query: string,
+  limit: number = 20,
+  offset: number = 0,
+  signal?: AbortSignal,
+): Promise<AssetSearchListResponse> {
+  return request<AssetSearchListResponse>('/assets/search', {
+    query: { q: query, limit, offset },
+    signal,
+  })
 }
 
 export function getLocations(signal?: AbortSignal): Promise<LocationListResponse> {

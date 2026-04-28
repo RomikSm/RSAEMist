@@ -1,24 +1,36 @@
-import { useEffect } from 'react'
+import { useState } from 'react'
 import { useTheme } from '../ThemeContext'
 import { useAuth } from '../AuthContext'
-import { useMessages, useAssets } from '../hooks/useMessages'
-import { useCarTypes, useAlertTypes } from '../hooks/useLookups'
-import { useFilters, buildMessageFilter } from '../FiltersContext'
+import { useMessages } from '../hooks/useMessages'
+import { useCarTypes, useAlertTypes, useLocations } from '../hooks/useLookups'
+import {
+  useFilters,
+  buildMessageFilter,
+  isFiltersActive,
+  type SeverityFilter,
+} from '../FiltersContext'
+// `isFiltersActive` is still used below for Clear button enable/disable.
 import FilterDropdown, { type FilterOption } from './FilterDropdown'
+import AssetSearchDropdown from './AssetSearchDropdown'
 import { formatTimeAgo, formatGForce } from '../utils/format'
 import type { MessageResponse } from '../api/types'
 import './Sidebar.css'
 
 interface SidebarProps {
   selectedMessageId: string | null
-  onSelectMessage: (id: string) => void
+  onSelectMessage: (id: string | null) => void
 }
 
 type Severity = 'critical' | 'warning' | 'normal'
 
 function classifySeverity(message: MessageResponse): Severity {
-  if (message.effectiveIsPriorityAlert) return 'critical'
-  if (message.effectiveIsAlert) return 'warning'
+  // Backend may return `effective*` (evaluated against thresholds) or
+  // just the raw DB flags `is_alert` / `is_priority_alert`. Prefer the
+  // evaluated values when present, otherwise fall back to the flat ones.
+  const isPriority = message.effectiveIsPriorityAlert ?? message.isPriorityAlert ?? message.rawIsPriorityAlert ?? false
+  const isAlert = message.effectiveIsAlert ?? message.isAlert ?? message.rawIsAlert ?? false
+  if (isPriority) return 'critical'
+  if (isAlert) return 'warning'
   return 'normal'
 }
 
@@ -120,34 +132,53 @@ const PERIOD_OPTIONS: FilterOption<number>[] = [
   { value: 3, label: 'Last 3 days' },
   { value: 7, label: 'Last 7 days' },
   { value: 30, label: 'Last 30 days' },
+  { value: -1, label: 'Custom range…' },
 ]
+
+const SEVERITY_OPTIONS: FilterOption<SeverityFilter>[] = [
+  { value: 'alerts', label: 'Alerts only' },
+  { value: 'priority', label: 'Priority only' },
+]
+
+/* Inline icons used by the new filter rows (Cars / Severity). */
+const CarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 17V8l3-4h12l3 4v9" />
+    <path d="M5 17h14" />
+    <circle cx="6" cy="17" r="2" />
+    <circle cx="18" cy="17" r="2" />
+  </svg>
+)
+
+const ShieldIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+)
 
 export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarProps) {
   const { theme, toggleTheme } = useTheme()
   const { user, logout } = useAuth()
-  const { filters: scope, setFilter, patch } = useFilters()
+  const {
+    filters: scope,
+    setFilter,
+    clear,
+    savedViews,
+    saveView,
+    applyView,
+    deleteView,
+  } = useFilters()
 
   const carTypesQuery = useCarTypes()
   const alertTypesQuery = useAlertTypes()
-  const assetsQuery = useAssets()
+  const locationsQuery = useLocations()
 
-  // When the user refines by car type in the left pane, a previously
-  // pinned asset from the top bar that is of a different car type would
-  // make the alerts list empty. Drop the asset pin in that case so the
-  // refinement behaves intuitively (see customer feedback).
-  const handleCarTypeChange = (carType: string | null) => {
-    if (!carType) {
-      setFilter('carType', null)
-      return
-    }
-    const next: Partial<typeof scope> = { carType }
-    if (scope.assetId) {
-      const asset = assetsQuery.data?.items.find(a => a.assetId === scope.assetId)
-      if (asset?.carType && asset.carType !== carType) {
-        next.assetId = null
-      }
-    }
-    patch(next)
+  const [savedViewsOpen, setSavedViewsOpen] = useState(false)
+
+  const handleSaveView = () => {
+    const name = window.prompt('Save current filters as…', 'My view')
+    if (name === null) return
+    saveView(name)
   }
 
   const carTypeOptions: FilterOption<string>[] =
@@ -160,10 +191,17 @@ export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarP
       hint: a.measurementUnits ?? undefined,
     })) ?? []
 
-  // The sidebar shows the alerts list for the current global scope. If
-  // the user narrowed severity via TopBar we honour that; otherwise we
-  // default to `is_priority_alert=true` so the list stays focused on
-  // high-priority issues (matches the Figma label "High Priority Alerts").
+  const locationOptions: FilterOption<string>[] =
+    locationsQuery.data?.items.map(l => ({ value: l.location, label: l.location })) ?? []
+
+  // The sidebar's "High Priority Alerts" section only ever shows
+  // priority (critical / red) alerts — that matches the section title
+  // and the customer's expectation. Filters narrow this priority set
+  // further (by car type, asset, period, …) but never widen it to
+  // include warnings/normal events. Explicit severity selection wins.
+  // Multi-select filters now go straight to the backend as repeated
+  // query params (`?car_type=A&car_type=B`), which Spring binds into
+  // `List<String>` — no client-side post-filter needed.
   const messageFilter = buildMessageFilter(scope, {
     mode: 'RAW',
     limit: 25,
@@ -172,14 +210,10 @@ export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarP
   const { data, error, isLoading } = useMessages(messageFilter)
   const items = data?.items ?? []
 
-  // Auto-select the first alert once data arrives (if the user has not
-  // picked anything yet). We deliberately depend on `items.length` rather
-  // than the array itself to avoid spurious re-runs.
-  useEffect(() => {
-    if (selectedMessageId === null && items.length > 0) {
-      onSelectMessage(items[0].messageId)
-    }
-  }, [selectedMessageId, items, onSelectMessage])
+  // Note: we intentionally do NOT auto-select the first alert.
+  // When nothing is selected, MapPanel renders the latest position of
+  // every railcar in the fleet — that is the customer-facing default.
+  // The user explicitly clicks an alert to drill down into one car.
 
   return (
     <aside className="sidebar">
@@ -212,26 +246,31 @@ export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarP
         </div>
       </div>
 
-      {/* Refine list — operates on top of the global scope set in the TopBar. */}
+      {/* Filters — Frame 59/60 in Figma moved every filter into this
+          single left-pane block. The previous TopBar dropdowns (All
+          Cars / Locations / Severity) are now rows in this list, with
+          Clear / Save View buttons at the bottom. */}
       <div className="filters-section">
-        <div className="filters-title">Refine list</div>
+        <div className="filters-title">Filters</div>
 
         <FilterDropdown<string>
+          multi
           variant="row"
           icon={<TriangleIcon />}
           allLabel="Any car type"
           placeholder="Car type"
           options={carTypeOptions}
           value={scope.carType}
-          onChange={handleCarTypeChange}
+          onChange={v => setFilter('carType', v)}
           statusMessage={carTypesQuery.isLoading ? 'Loading…' : carTypesQuery.error ? 'Failed to load' : undefined}
         />
 
         <FilterDropdown<string>
+          multi
           variant="row"
           icon={<MapPinIcon />}
           allLabel="Any alert type"
-          placeholder="Alert type"
+          placeholder="Alert Type"
           options={alertTypeOptions}
           value={scope.alertType}
           onChange={v => setFilter('alertType', v)}
@@ -267,8 +306,134 @@ export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarP
           placeholder="Period"
           options={PERIOD_OPTIONS}
           value={scope.rangeDays}
-          onChange={v => setFilter('rangeDays', v)}
+          onChange={v => {
+            // Switching away from "Custom range…" clears the dates so we
+            // don't accidentally keep them in the request.
+            if (v !== -1) {
+              setFilter('customFrom', null)
+              setFilter('customTo', null)
+            }
+            setFilter('rangeDays', v)
+          }}
         />
+
+        {scope.rangeDays === -1 && (
+          <div className="filter-custom-range">
+            <label className="filter-custom-range-field">
+              <span>From</span>
+              <input
+                type="date"
+                lang="en"
+                value={scope.customFrom ?? ''}
+                max={scope.customTo ?? undefined}
+                onChange={e => setFilter('customFrom', e.target.value || null)}
+              />
+            </label>
+            <label className="filter-custom-range-field">
+              <span>To</span>
+              <input
+                type="date"
+                lang="en"
+                value={scope.customTo ?? ''}
+                min={scope.customFrom ?? undefined}
+                onChange={e => setFilter('customTo', e.target.value || null)}
+              />
+            </label>
+          </div>
+        )}
+
+        {/* All Cars — typeahead instead of a static dropdown because the
+            fleet may have thousands of railcars. The list stays empty
+            until the user types something. */}
+        <AssetSearchDropdown
+          icon={<CarIcon />}
+          placeholder="All Cars"
+          value={scope.assetId}
+          onChange={v => setFilter('assetId', v)}
+        />
+
+        <FilterDropdown<string>
+          multi
+          variant="row"
+          icon={<MapPinIcon />}
+          allLabel="All Locations"
+          placeholder="Location"
+          options={locationOptions}
+          value={scope.location}
+          onChange={v => setFilter('location', v)}
+          statusMessage={locationsQuery.isLoading ? 'Loading…' : locationsQuery.error ? 'Failed to load' : undefined}
+        />
+
+        <FilterDropdown<SeverityFilter>
+          variant="row"
+          icon={<ShieldIcon />}
+          allLabel="Any severity"
+          placeholder="Severity"
+          options={SEVERITY_OPTIONS}
+          value={scope.severity === 'all' ? null : scope.severity}
+          onChange={v => setFilter('severity', v ?? 'all')}
+        />
+
+        {/* Action row at the bottom of Filters. "Save View" persists to
+            localStorage via FiltersContext (the backend has no preset
+            endpoint yet). */}
+        <div className="filters-actions">
+          <button
+            type="button"
+            className="filters-action-btn filters-action-clear"
+            onClick={clear}
+            disabled={!isFiltersActive(scope)}
+            title={isFiltersActive(scope) ? 'Reset every filter' : 'Filters already cleared'}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className="filters-action-btn filters-action-save"
+            onClick={handleSaveView}
+          >
+            Save View
+          </button>
+        </div>
+
+        {savedViews.length > 0 && (
+          <div className="filters-saved-wrap">
+            <button
+              type="button"
+              className="filters-saved-toggle"
+              onClick={() => setSavedViewsOpen(v => !v)}
+            >
+              Saved views ({savedViews.length})
+            </button>
+            {savedViewsOpen && (
+              <ul className="filters-saved-list">
+                {savedViews.map(v => (
+                  <li key={v.id} className="filters-saved-item">
+                    <button
+                      type="button"
+                      className="filters-saved-apply"
+                      onClick={() => {
+                        applyView(v.id)
+                        setSavedViewsOpen(false)
+                      }}
+                    >
+                      {v.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="filters-saved-delete"
+                      onClick={() => deleteView(v.id)}
+                      aria-label={`Delete ${v.name}`}
+                      title="Delete"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {/* High Priority Alerts */}
@@ -296,7 +461,7 @@ export default function Sidebar({ selectedMessageId, onSelectMessage }: SidebarP
               <button
                 key={msg.messageId}
                 className={`alert-card ${selectedMessageId === msg.messageId ? 'selected' : ''}`}
-                onClick={() => onSelectMessage(msg.messageId)}
+                onClick={() => onSelectMessage(selectedMessageId === msg.messageId ? null : msg.messageId)}
                 style={{ backgroundImage: cfg.gradient }}
                 title={formatTimeAgo(msg.messageDate)}
               >
